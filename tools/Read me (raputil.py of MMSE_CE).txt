@@ -1,0 +1,62 @@
+Read me (raputil.py of MMSE_CE)
+
+def MMSE_CE(Y, pilotValue, pilotCarriers, K, P, h, SNR):
+    """
+    MMSE channel estimation in frequency domain.
+
+    Args:
+        Y           : 接收的頻域信號 (K, )，complex
+        pilotValue  : pilot 值 (P, )，complex
+        pilotCarriers : pilot 所在子載波索引 (P, )
+        K           : 總子載波數
+        P           : pilot 數量
+        h           : 時域通道 (L, )，complex
+        SNR         : SNR in dB
+
+    Returns:
+        H_MMSE : 長度 K 的頻域通道 MMSE 估計 (complex)
+        W_MMSE: 對應的 MMSE 權重矩陣 (K, P)（complex）
+    """
+
+    # ---------- 1. 噪聲方差 ----------
+    SNR_lin = 10 ** (SNR / 10.0)
+    # 假設 OFDM 總平均功率約為 1，則噪聲方差可近似為：
+    sigma2 = 1.0 / SNR_lin
+
+    # ---------- 2. 由 h 構造時域自相關矩陣 R_h ----------
+    h = h.reshape(-1, 1)                       # (L,1)
+    L = h.shape[0]
+    R_h = h @ h.conj().T                       # (L,L)，簡單近似：樣本自相關
+
+    # ---------- 3. 轉成頻域通道相關矩陣 R_H = F_L * R_h * F_L^H ----------
+    # 只需 L 點 FFT，然後再嵌入 K 維
+    F_L = Normalized_FFT_Matrix(L)             # (L,L)
+    R_H_L = F_L @ R_h @ F_L.conj().T           # (L,L)
+
+    # 把 L 維頻域相關矩陣嵌入到 K 維：
+    R_H = np.zeros((K, K), dtype=complex)
+    R_H[:L, :L] = R_H_L
+
+    # ---------- 4. 取出 pilot 子矩陣 ----------
+    # R_Hpp = E{ H_pilot * H_pilot^H } (P,P)
+    # R_Hkp = E{ H_all * H_pilot^H }   (K,P)
+    R_Hpp = R_H[np.ix_(pilotCarriers, pilotCarriers)]  # (P,P)
+    R_Hkp = R_H[:, pilotCarriers]                      # (K,P)
+
+    # ---------- 5. 構造觀測向量與觀測矩陣 ----------
+    # y_pilot = Y[pilotCarriers] = diag(pilotValue) * H_pilot + noise
+    # => H_pilot = diag(1/pilotValue) * y_pilot - diag(1/pilotValue)*noise
+    # 因此等效噪聲共變異數 = sigma2 * diag(1/|pilotValue|^2)
+    y_p = Y[pilotCarriers].reshape(-1, 1)              # (P,1)
+    X_p = np.diag(pilotValue)                          # (P,P)
+
+    # ---------- 6. MMSE 權重矩陣 ----------
+    # W_MMSE = R_Hkp * ( X_p^H * R_Hpp * X_p + sigma2 I )^{-1} * X_p^H
+    # 這裡先把 R_Hpp 映射到「觀測空間」：
+    R_YY = X_p @ R_Hpp @ X_p.conj().T + sigma2 * np.eye(P, dtype=complex)
+    W_MMSE = R_Hkp @ X_p.conj().T @ la.inv(R_YY)       # (K,P)
+
+    # ---------- 7. 頻域通道的 MMSE 估計 ----------
+    H_MMSE = (W_MMSE @ y_p).reshape(-1,)               # (K,)
+
+    return H_MMSE, W_MMSE
