@@ -24,7 +24,6 @@ def build_ce_dnn(K, SNR, savefile, learning_rate=1e-3, training_epochs=2000, bat
     n_input = 2 * K + 2 * K  # yp and xp as input
     n_output = 2 * K
 
-    # please fill in the blank in the following codes
     nn_input = tf.placeholder(tf.float64, (None, n_input), name='nn_input') # YOUR CODE HERE 1
     H_true = tf.placeholder(tf.float64, (None, n_output), name='H_true')    # YOUR CODE HERE 2
 
