@@ -30,8 +30,6 @@ CR = 1
 
 SNRdb = 25  # signal to noise-ratio in dB at the receiver
 Clipping_Flag = False
-CP_flag = False
-NoCP = True
 
 _QPSK_mapping_table = {
     (0,1) : (-1+1j,), (1,1) : (1+1j,),
@@ -302,67 +300,39 @@ def LS_CE(Y,pilotValue,pilotCarriers,K,P,int_opt):
         H_LS = interpolate(LS_est,pilotCarriers,K,1)
     return H_LS
 
-def MMSE_CE(Y, pilotValue, pilotCarriers, K, P, h, SNR):
-    """
-    MMSE channel estimation in frequency domain.
+def MMSE_CE(Y,pilotValue,pilotCarriers,K,P,h,SNR):
+    # Please fill in the blanks in the following codes
+    snr = 10 ** (SNR * 0.1)
+    index = np.arange(P)
+    H_tilde = np.zeros(P, dtype=complex)
+    H_tilde[index] = Y[pilotCarriers] / pilotValue[index]
+    index = np.arange(len(h))
+    hh = h.dot(np.conj(h).T)
+    tmp = h * np.conj(h) * index
+    r = np.sum(tmp) / hh
+    r2 = tmp.dot(index.T) / hh
+    tau_rms = (r2 - r**2)**0.5
+    df = 1 / K
+    j2pi_tau_df = 1j * 2 * math.pi * tau_rms * df
+    K1 = np.reshape(np.repeat(np.arange(K).T, P), (K, P))
+    K2 = np.arange(P)
+    for i in range(K - 1):
+        K2 = np.concatenate((K2, np.arange(P)))
+    K2 = np.reshape(K2, (K, P))
+    rf = np.ones((K, P), dtype=complex) / (1 + j2pi_tau_df * (K1 - K2 * (K / P)))
+    K3 = np.reshape(np.repeat(np.arange(P).T, P), (P, P))
+    K4 = np.arange(P)
+    for i in range(P - 1):
+        K4 = np.concatenate((K4, np.arange(P)))
+    K4 = np.reshape(K4, (P, P))
+    rf2 = np.ones((P, P), dtype=complex) / (1 + j2pi_tau_df * K * (K3 - K4) / P)
+    Rhp = rf
+    Rpp = rf2 + np.eye(len(H_tilde)) / snr
 
-    Args:
-        Y           : 接收的頻域信號 (K, )，complex
-        pilotValue  : pilot 值 (P, )，complex
-        pilotCarriers : pilot 所在子載波索引 (P, )
-        K           : 總子載波數
-        P           : pilot 數量
-        h           : 時域通道 (L, )，complex
-        SNR         : SNR in dB
+    W_MMSE = Rhp.dot(np.linalg.inv(Rpp))
+    H_MMSE = (W_MMSE.dot(H_tilde.T)).T
 
-    Returns:
-        H_MMSE : 長度 K 的頻域通道 MMSE 估計 (complex)
-        W_MMSE: 對應的 MMSE 權重矩陣 (K, P)（complex）
-    """
-
-    # ---------- 1. 噪聲方差 ----------
-    SNR_lin = 10 ** (SNR / 10.0)
-    # 假設 OFDM 總平均功率約為 1，則噪聲方差可近似為：
-    sigma2 = 1.0 / SNR_lin
-
-    # ---------- 2. 由 h 構造時域自相關矩陣 R_h ----------
-    h = h.reshape(-1, 1)                       # (L,1)
-    L = h.shape[0]
-    R_h = h @ h.conj().T                       # (L,L)，簡單近似：樣本自相關
-
-    # ---------- 3. 轉成頻域通道相關矩陣 R_H = F_L * R_h * F_L^H ----------
-    # 只需 L 點 FFT，然後再嵌入 K 維
-    F_L = Normalized_FFT_Matrix(L)             # (L,L)
-    R_H_L = F_L @ R_h @ F_L.conj().T           # (L,L)
-
-    # 把 L 維頻域相關矩陣嵌入到 K 維：
-    R_H = np.zeros((K, K), dtype=complex)
-    R_H[:L, :L] = R_H_L
-
-    # ---------- 4. 取出 pilot 子矩陣 ----------
-    # R_Hpp = E{ H_pilot * H_pilot^H } (P,P)
-    # R_Hkp = E{ H_all * H_pilot^H }   (K,P)
-    R_Hpp = R_H[np.ix_(pilotCarriers, pilotCarriers)]  # (P,P)
-    R_Hkp = R_H[:, pilotCarriers]                      # (K,P)
-
-    # ---------- 5. 構造觀測向量與觀測矩陣 ----------
-    # y_pilot = Y[pilotCarriers] = diag(pilotValue) * H_pilot + noise
-    # => H_pilot = diag(1/pilotValue) * y_pilot - diag(1/pilotValue)*noise
-    # 因此等效噪聲共變異數 = sigma2 * diag(1/|pilotValue|^2)
-    y_p = Y[pilotCarriers].reshape(-1, 1)              # (P,1)
-    X_p = np.diag(pilotValue)                          # (P,P)
-
-    # ---------- 6. MMSE 權重矩陣 ----------
-    # W_MMSE = R_Hkp * ( X_p^H * R_Hpp * X_p + sigma2 I )^{-1} * X_p^H
-    # 這裡先把 R_Hpp 映射到「觀測空間」：
-    R_YY = X_p @ R_Hpp @ X_p.conj().T + sigma2 * np.eye(P, dtype=complex)
-    W_MMSE = R_Hkp @ X_p.conj().T @ la.inv(R_YY)       # (K,P)
-
-    # ---------- 7. 頻域通道的 MMSE 估計 ----------
-    H_MMSE = (W_MMSE @ y_p).reshape(-1,)               # (K,)
-
-    return H_MMSE, W_MMSE
-
+    return H_MMSE,W_MMSE
 
 interpolate_method = 1
 def interpolate(H_est,pilotCarriers,K,method): #for P<K 只能在内部插  complex can be interpolate?
@@ -475,7 +445,7 @@ def get_WMMSE(SNR, CP_flag=True):
     h = channel_test[index].reshape((-1,))
     H,A = get_cyclic_and_cutoff_matrix(h)
     bits = np.random.binomial(n=1, p=0.5, size=(payloadBits_per_OFDM,)) #label
-    if NoCP:
+    if not CP_flag:
         signal_output = ofdm_simulate_cp_free(bits, H, A, FH, SNR, mu, K, P, pilotValue, pilotCarriers, dataCarriers, CE_flag=True)
     else:
         signal_output,_ = ofdm_simulate(bits, h, SNR, mu, CP_flag, K, P, CP, pilotValue, pilotCarriers, dataCarriers, Clipping_Flag)
@@ -488,7 +458,7 @@ def get_WMMSE(SNR, CP_flag=True):
     W_MMSE = np.concatenate(( np.concatenate((np.real(W_MMSE),-np.imag(W_MMSE)),axis=1),np.concatenate((np.imag(W_MMSE),np.real(W_MMSE)),axis=1) ))
     return W_MMSE 
 
-def sample_gen(bs, SNR = 20, training_flag=True, NoCP=False, CP_flag=True):
+def sample_gen(bs, SNR=20, training_flag=True, CP_flag=True):
     if training_flag:
         index = np.random.choice(np.arange(train_size), size=bs)    #从1*train_size的array中随机选出bs个下标
         h_total = channel_train[index]
@@ -505,7 +475,7 @@ def sample_gen(bs, SNR = 20, training_flag=True, NoCP=False, CP_flag=True):
         #channel estimation for the input samples
         bits = np.random.binomial(n=1, p=0.5, size=(payloadBits_per_OFDM, ))
         # pilotValue = Modulation(bits)
-        if NoCP:
+        if not CP_flag:
             signal_output = ofdm_simulate_cp_free(bits, H, A, FH, SNR, mu, K, P, pilotValue, pilotCarriers, dataCarriers, CE_flag=True)
         else:
             signal_output = ofdm_simulate(bits, h, SNR, mu, CP_flag, K, P, CP, pilotValue, pilotCarriers, dataCarriers,
@@ -525,7 +495,7 @@ def sample_gen(bs, SNR = 20, training_flag=True, NoCP=False, CP_flag=True):
     Xp = np.tile(np.concatenate((np.real(pilotValue), np.imag(pilotValue))), (bs, 1))  # (bs, 2K)
     return np.asarray(H_samples), np.asarray(H_labels), np.asarray(Yp), np.asarray(Xp)
 
-def sample_gen_for_OAMP(bs, SNR, sess, input_holder, output, training_flag=True):
+def sample_gen_for_OAMP(bs, SNR, sess, input_holder, output, training_flag=True, CP_flag=True):
     if training_flag:
         #generate training samples:
         index = np.random.choice(np.arange(train_size), size=bs)    #从1*train_size的array中随机选出bs个下标
@@ -547,10 +517,16 @@ def sample_gen_for_OAMP(bs, SNR, sess, input_holder, output, training_flag=True)
         H,A = get_cyclic_and_cutoff_matrix(h)
         #channel estimation for the input samples
         bits = np.random.binomial(n=1, p=0.5, size=(payloadBits_per_OFDM,))
-        if NoCP:
+        if not CP_flag:
             signal_output,sigma2,bits_mod = ofdm_simulate_cp_free(bits, H, A, FH, SNR, mu, K, P, pilotValue, pilotCarriers, dataCarriers)
         else:
-            signal_output,_ = ofdm_simulate(bits, h, SNR, mu, CP_flag, K, P, CP, pilotValue, pilotCarriers, dataCarriers, Clipping_Flag)
+            signal_output,sigma2 = ofdm_simulate(bits, h, SNR, mu, CP_flag, K, P, CP, pilotValue, pilotCarriers, dataCarriers, Clipping_Flag)
+            if mu == 2:
+                bits_mod = Modulation(bits)
+            elif mu == 4:
+                bits_mod = Modulation_16(bits)
+            else:
+                bits_mod = Modulation_64(bits)
         yp_complex = signal_output[0:K] + 1j * signal_output[K:2*K]
         Yp_complex = F @ yp_complex
         
@@ -566,7 +542,7 @@ def sample_gen_for_OAMP(bs, SNR, sess, input_holder, output, training_flag=True)
         h_est = IDFT(H_est) #??64-->16
         H_hat,A_hat = get_cyclic_and_cutoff_matrix(h_est)
 
-        if NoCP:
+        if not CP_flag:
             yd_complex = (signal_output[2*K:3*K] + 1j * signal_output[3*K:4*K]) - A_hat @ FH @ pilotValue 
             yd = np.concatenate((np.real(yd_complex.reshape((K,1))),np.imag(yd_complex.reshape((K,1))))) 
         else:
@@ -593,8 +569,8 @@ def sample_gen_for_OAMP(bs, SNR, sess, input_holder, output, training_flag=True)
     return y_,x_,H_,sigma2_
 
 
-def test_ce(sess, input_holder, output, SNR, est_type, NoCP=False, CP_flag=True):
-    num_trail = 1000
+def test_ce(sess, input_holder, output, SNR, est_type, CP_flag=True, num_trail=1000):
+
     L = 16  # length of channel impulse response
     downsampler = allCarriers[::K // L]
     MSE_T, MSE_F = 0., 0.
@@ -604,7 +580,7 @@ def test_ce(sess, input_holder, output, SNR, est_type, NoCP=False, CP_flag=True)
         Htrue = np.fft.fft(h, n=K)
         H, A = get_cyclic_and_cutoff_matrix(h)
         bits = np.random.binomial(n=1, p=0.5, size=(payloadBits_per_OFDM,))  # label
-        if NoCP:
+        if not CP_flag:
             signal_output, sigma2, _ = ofdm_simulate_cp_free(bits, H, A, FH, SNR, mu, K, P, pilotValue, pilotCarriers,
                                                              dataCarriers)
         else:
@@ -652,7 +628,7 @@ def test_ce(sess, input_holder, output, SNR, est_type, NoCP=False, CP_flag=True)
     return MSE_T / num_trail, MSE_F / num_trail
 
 
-def test_DL_OAMP(sess,prob,x_hat_T,input_holder,output,SNR,OAMPnet=False):
+def test_DL_OAMP(sess, prob, x_hat_T, input_holder, output, SNR, OAMPnet=False, CP_flag=True):
     err_bits_target = 1000
     total_err_bits = 0
     total_bits = 0
@@ -663,7 +639,7 @@ def test_DL_OAMP(sess,prob,x_hat_T,input_holder,output,SNR,OAMPnet=False):
         h = channel_test[index].reshape((-1,))
         H, A = get_cyclic_and_cutoff_matrix(h)
         bits = np.random.binomial(n=1, p=0.5, size=(payloadBits_per_OFDM,)) #label
-        if NoCP:
+        if not CP_flag:
             signal_output, sigma2,_ = ofdm_simulate_cp_free(bits, H, A, FH, SNR, mu, K, P, pilotValue, pilotCarriers, dataCarriers)
         else:
             signal_output,sigma2 = ofdm_simulate(bits, h, SNR, mu, CP_flag, K, P, CP, pilotValue, pilotCarriers, dataCarriers, Clipping_Flag)
@@ -689,7 +665,7 @@ def test_DL_OAMP(sess,prob,x_hat_T,input_holder,output,SNR,OAMPnet=False):
 
         #关于CP-Free的仿真以及remove ISI的操作还是没搞懂——目前的操作是加上任意的GI(而非CP)，相当于只仿了ICI，故接收端不需要去除ISI
         #目前的理解：信道估计时可以不remove ISI（不知道有多大影响）；信号检测时估计出的上一帧符号直接用已知的导频信号
-        if NoCP:
+        if not CP_flag:
             yd_complex = (signal_output[2*K:3*K] + 1j * signal_output[3*K:4*K]) - A_hat @ FH @ pilotValue 
         # signal_power = np.mean(abs(yd_complex**2))   #这个yd_complex已经是加上噪声的接收信号了，不应该先把噪声减去吗？或者用H_bar*u
         # sigma2 = signal_power * 10**(-SNR/10)
