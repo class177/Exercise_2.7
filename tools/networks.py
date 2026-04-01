@@ -25,19 +25,19 @@ def build_ce_dnn(K, SNR, savefile, learning_rate=1e-3, training_epochs=2000, bat
     n_output = 2 * K
 
     # please fill in the blank in the following codes
-    nn_input = tf.placeholder(tf.float64, (None, n_input), name='nn_input')
-    H_true = tf.placeholder(tf.float64, (None, n_output), name='H_true')    # label
+    nn_input = tf.placeholder(tf.float64, (None, n_input), name='nn_input') # YOUR CODE HERE 1
+    H_true = tf.placeholder(tf.float64, (None, n_output), name='H_true')    # YOUR CODE HERE 2
 
-    dense1 = Dense(nh1, activation='relu')
-    dense2 = Dense(nh2, activation='relu')
-    output_layer = Dense(n_output, activation=None)
+    dense1 = Dense(nh1, activation='relu')   # YOUR CODE HERE 3
+    dense2 = Dense(nh2, activation='relu')   # YOUR CODE HERE 4
+    output_layer = Dense(n_output, activation=None) # YOUR CODE HERE 5
 
-    tmp = dense1(nn_input)
-    tmp = dense2(tmp)
-    H_out = output_layer(tmp)
+    tmp = dense1(nn_input) # YOUR CODE HERE 6
+    tmp = dense2(tmp) # YOUR CODE HERE 7
+    H_out = output_layer(tmp) # YOUR CODE HERE 8
 
     # Define loss and optimizer, minimize the l2 loss
-    loss_ = tf.nn.l2_loss(H_out - H_true[:, :n_output])
+    loss_ = tf.nn.l2_loss(H_out - H_true[:, :n_output])  # YOUR CODE HERE 9
     global_step = tf.Variable(0, trainable=False)
     decay_steps, lr_decay = 20000, 0.1
     lr_ = tf.train.exponential_decay(learning_rate, global_step, decay_steps, lr_decay, name='lr')
