@@ -300,39 +300,48 @@ def LS_CE(Y,pilotValue,pilotCarriers,K,P,int_opt):
         H_LS = interpolate(LS_est,pilotCarriers,K,1)
     return H_LS
 
-def MMSE_CE(Y,pilotValue,pilotCarriers,K,P,h,SNR):
-    # Please fill in the blanks in the following codes
-    snr = 10 ** (SNR * 0.1)
-    index = np.arange(P)
-    H_tilde = np.zeros(P, dtype=complex)
-    H_tilde[index] = Y[pilotCarriers] / pilotValue[index]
-    index = np.arange(len(h))
-    hh = h.dot(np.conj(h).T)
-    tmp = h * np.conj(h) * index
-    r = np.sum(tmp) / hh
-    r2 = tmp.dot(index.T) / hh
-    tau_rms = (r2 - r**2)**0.5
-    df = 1 / K
-    j2pi_tau_df = 1j * 2 * math.pi * tau_rms * df
-    K1 = np.reshape(np.repeat(np.arange(K).T, P), (K, P))
-    K2 = np.arange(P)
-    for i in range(K - 1):
-        K2 = np.concatenate((K2, np.arange(P)))
-    K2 = np.reshape(K2, (K, P))
-    rf = np.ones((K, P), dtype=complex) / (1 + j2pi_tau_df * (K1 - K2 * (K / P)))
-    K3 = np.reshape(np.repeat(np.arange(P).T, P), (P, P))
-    K4 = np.arange(P)
-    for i in range(P - 1):
-        K4 = np.concatenate((K4, np.arange(P)))
-    K4 = np.reshape(K4, (P, P))
-    rf2 = np.ones((P, P), dtype=complex) / (1 + j2pi_tau_df * K * (K3 - K4) / P)
-    Rhp = rf
-    Rpp = rf2 + np.eye(len(H_tilde)) / snr
-
-    W_MMSE = Rhp.dot(np.linalg.inv(Rpp))
-    H_MMSE = (W_MMSE.dot(H_tilde.T)).T
-
-    return H_MMSE,W_MMSE
+def MMSE_CE(Y, pilotValue, pilotCarriers, K, P, h, SNR):
+    # 1. 計算 SNR 線性值與基礎 LS 估計
+    snr_linear = 10 ** (SNR * 0.1)
+    # 直接計算導頻處的 LS 估計值 H_tilde (長度為 P)
+    H_tilde = Y[pilotCarriers] / pilotValue
+    
+    # 2. 計算均方根時延擴展 (RMS Delay Spread)
+    # 利用向量化運算簡化 tau_rms 的計算
+    idx_h = np.arange(len(h))
+    h_power = np.abs(h)**2
+    hh_sum = np.sum(h_power)
+    
+    mean_tau = np.sum(h_power * idx_h) / hh_sum
+    mean_tau2 = np.sum(h_power * (idx_h**2)) / hh_sum
+    tau_rms = np.sqrt(mean_tau2 - mean_tau**2)
+    
+    # 3. 預計算頻域相關係數常數
+    # df = 1/K, 相關性模型假設為指數衰減
+    j2pi_tau_df = 1j * 2 * np.pi * tau_rms / K
+    
+    # 4. 計算 Rhp (數據載波與導頻載波之間的互相關矩陣) - 大小 (K, P)
+    # 使用廣播機制建立 (k - p * K/P) 的矩陣
+    k_indices = np.arange(K).reshape(-1, 1)  # (K, 1)
+    p_indices = np.arange(P).reshape(1, -1)  # (1, P)
+    Rhp = 1 / (1 + j2pi_tau_df * (k_indices - p_indices * (K / P)))
+    
+    # 5. 計算 Rpp (導頻載波之間的自相關矩陣) - 大小 (P, P)
+    # 索引差值 (p_row - p_col)
+    p_col = np.arange(P).reshape(1, -1)
+    p_row = np.arange(P).reshape(-1, 1)
+    Rpp_ideal = 1 / (1 + j2pi_tau_df * (K / P) * (p_row - p_col))
+    
+    # 加上噪聲項 (1/SNR)
+    Rpp = Rpp_ideal + np.eye(P) / snr_linear
+    
+    # 6. 計算 MMSE 權重與最終估計結果
+    # W_MMSE = Rhp * inv(Rpp)
+    W_MMSE = Rhp @ np.linalg.inv(Rpp)
+    # H_MMSE = W_MMSE * H_tilde
+    H_MMSE = W_MMSE @ H_tilde
+    
+    return H_MMSE, W_MMSE
 
 interpolate_method = 1
 def interpolate(H_est,pilotCarriers,K,method): #for P<K 只能在内部插  complex can be interpolate?
