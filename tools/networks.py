@@ -18,26 +18,26 @@ import tools.shrinkage as shrinkage
 from .train import load_trainable_vars,save_trainable_vars
 from .raputil import sample_gen
 from tensorflow.keras.layers import Dense
-
-
 def build_ce_dnn(K, SNR, savefile, learning_rate=1e-3, training_epochs=2000, batch_size=50, nh1=500, nh2=250, test_flag=False, cp_flag=True):
     n_input = 2 * K + 2 * K  # yp and xp as input
     n_output = 2 * K
 
-    # please fill in the blank in the following codes
-    nn_input = '# YOUR CODE HERE 1'
-    H_true = '# YOUR CODE HERE 2'    # label
+    # 1. 輸入與標籤 placeholder
+    nn_input = tf.placeholder(tf.float32, shape=[None, n_input], name='nn_input')   # YOUR CODE HERE 1
+    H_true  = tf.placeholder(tf.float32, shape=[None, n_output], name='H_true')     # YOUR CODE HERE 2
 
-    dense1 = '# YOUR CODE HERE 3'
-    dense2 = '# YOUR CODE HERE 4'
-    output_layer = '# YOUR CODE HERE 5'
+    # 2. DNN 結構（兩層隱藏層 + 輸出層）
+    dense1 = Dense(nh1, activation='relu', name='dense1')(nn_input)                 # YOUR CODE HERE 3
+    dense2 = Dense(nh2, activation='relu', name='dense2')(dense1)                   # YOUR CODE HERE 4
+    output_layer = Dense(n_output, activation=None, name='output')(dense2)          # YOUR CODE HERE 5
 
-    tmp = '# YOUR CODE HERE 6'
-    tmp = '# YOUR CODE HERE 7'
-    H_out = '# YOUR CODE HERE 8'
+    # 3. 這兩行通常是做一些簡單的前處理／縮放，這裡直接 pass-through
+    tmp = output_layer                                                                # YOUR CODE HERE 6
+    tmp = tmp                                                                         # YOUR CODE HERE 7
+    H_out = tmp                                                                       # YOUR CODE HERE 8
 
-    # Define loss and optimizer, minimize the l2 loss
-    loss_ = '# YOUR CODE HERE 9'
+    # 4. loss：L2 / MSE
+    loss_ = tf.reduce_mean(tf.square(H_out - H_true), name='mse_loss')             # YOUR CODE HERE 9
     global_step = tf.Variable(0, trainable=False)
     decay_steps, lr_decay = 20000, 0.1
     lr_ = tf.train.exponential_decay(learning_rate, global_step, decay_steps, lr_decay, name='lr')

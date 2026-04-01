@@ -1,0 +1,24 @@
+READ ME
+
+簡要說明各個 YOUR CODE HERE
+1 & 2：placeholder
+
+nn_input：大小 (None, 4K)，對應「接收 pilot 的實虛部 + 已知 pilot 的實虛部」。
+H_true：大小 (None, 2K)，對應真實通道頻域 
+H
+H 的 [Re(H), Im(H)]。
+3–5：DNN 結構
+
+使用題目已 import 的 tensorflow.keras.layers.Dense：
+第一層：nh1 個神經元，ReLU。
+第二層：nh2 個神經元，ReLU。
+輸出層：2K 維，線性輸出（不加 activation），對應估測的通道。
+6–8：輸出處理
+
+原始 starter 沒指定處理方式，多數版本就是直接把 output_layer 當成 H_out； 因此這裡採用直接傳遞。
+9：loss
+
+使用 MSE：mean((H_out - H_true)^2)，符合註解「minimize the l2 loss」。
+你可以直接把這段貼回 Exercise_2.7 的 ce_dnn.py 或同名檔案中，覆蓋掉 # YOUR CODE HERE 部分。
+
+之後在 main script（通常是 Exercise_2_7_main.py 或類似）呼叫 build_ce_dnn 時，就會建立並訓練 DNN 通道估測器。
