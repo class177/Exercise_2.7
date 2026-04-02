@@ -1,8 +1,3 @@
-PPO for Discrete OpenAI Gym Environments
-========================================
-Training Proximal Policy Optimization (PPO) with PyTorch on discrete-action Gym tasks
-
-
 1. Overview
 -----------
 
